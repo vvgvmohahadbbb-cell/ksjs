@@ -1,0 +1,6 @@
+{
+  "appId": "com.ksjs.tasbeeh",
+  "appName": "سبح",
+  "webDir": "www",
+  "android": { "backgroundColor": "#0b1f1a" }
+}

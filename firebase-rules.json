@@ -1,0 +1,36 @@
+{
+  "rules": {
+    "users": {
+      ".read": true,
+      ".indexOn": ["total"],
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        "total": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= (data.exists() ? data.val() + 20000 : 20000)" },
+        "name": { ".validate": "newData.isString() && newData.val().length <= 20" },
+        "photo": { ".validate": "newData.isString() && newData.val().length <= 12000" },
+        "$other": { ".validate": false }
+      }
+    },
+    "scores": {
+      ".read": true,
+      ".indexOn": [".value"],
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= (data.exists() ? data.val() + 20000 : 20000)"
+      }
+    },
+    "daily": {
+      "$day": {
+        ".read": true,
+        ".indexOn": ["n"],
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid",
+          "n": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000" },
+          "name": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "p": { ".validate": "newData.isString() && newData.val().length <= 12000" },
+          "$other": { ".validate": false }
+        }
+      }
+    }
+  }
+}

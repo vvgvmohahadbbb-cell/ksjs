@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0b1f1a">
+<title>سبح</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="update" class="update hidden">
+  <div class="urow">
+    <div><b id="uTitle">تحديث جديد</b><div id="uNotes" class="mut small"></div></div>
+    <div class="ubtns"><button id="uGo" class="btn gold">تحديث</button><button id="uLater" class="btn ghost">لاحقاً</button></div>
+  </div>
+  <div id="uBarWrap" class="bar hidden"><i id="uBar"></i></div>
+  <div id="uInfo" class="mut small hidden"></div>
+</div>
+
+<main>
+  <section id="tab-home" class="tab active">
+    <div class="chips">
+      <div class="chip" id="chStreak">🔥 0</div>
+      <div class="chip" id="chRank">🏆 --</div>
+      <div class="chip" id="chLevel">🌱 مبتدئ</div>
+    </div>
+    <div id="chase" class="chase"></div>
+    <div class="ringwrap">
+      <svg viewBox="0 0 300 300"><circle class="bgc" cx="150" cy="150" r="135"/><circle id="ring" class="fg" cx="150" cy="150" r="135"/></svg>
+      <button id="tap"><span id="dh">سبحان الله</span><b id="cnt">0</b></button>
+    </div>
+    <div class="stats2"><div><b id="todayTxt">0 / 100</b><span class="mut small">اليوم</span></div><div><b id="totalTxt">0</b><span class="mut small">المجموع</span></div></div>
+    <div id="dhikrs" class="dhikrs"></div>
+    <button id="resetCnt" class="btn ghost small">تصفير هذا العداد</button>
+  </section>
+
+  <section id="tab-rank" class="tab">
+    <div class="seg"><button id="segAll" class="on">كل الوقت</button><button id="segDay">اليوم</button></div>
+    <div id="myRank" class="card"></div>
+    <div id="board"></div>
+  </section>
+
+  <section id="tab-me" class="tab">
+    <div class="card center">
+      <label class="avatar big" for="photoIn" id="avMe"></label>
+      <input type="file" id="photoIn" accept="image/*" hidden>
+      <input id="nameIn" maxlength="20" placeholder="اسمك">
+    </div>
+    <div class="card">
+      <div class="mut small">هدفك اليومي (يكمّل السلسلة)</div>
+      <div class="goals" id="goals"></div>
+    </div>
+    <div class="card" id="statsCard"></div>
+    <div class="card"><div class="mut small">المستويات</div><div id="badges" class="badges"></div></div>
+    <div class="mut small center" id="verTxt"></div>
+  </section>
+</main>
+
+<nav>
+  <button data-tab="home" class="on"><i>📿</i>تسبيح</button>
+  <button data-tab="rank"><i>🏆</i>الترتيب</button>
+  <button data-tab="me"><i>👤</i>حسابي</button>
+</nav>
+
+<div id="welcome" class="overlay hidden"><div class="sheet">
+  <h2>أهلاً فيك 🌙</h2>
+  <p class="mut">اختار اسمك وصورتك عشان يطلعوا بالترتيب</p>
+  <label class="avatar big" for="photoW" id="avW">📷</label>
+  <input type="file" id="photoW" accept="image/*" hidden>
+  <input id="nameW" maxlength="20" placeholder="اسمك">
+  <button id="startW" class="btn gold wide">ابدأ التسبيح</button>
+</div></div>
+<div id="toast" class="toast"></div>
+
+<script src="config.js"></script>
+<script src="version.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
