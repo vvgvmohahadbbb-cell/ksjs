@@ -39,6 +39,12 @@
     <div id="azList"></div>
   </section>
 
+  <section id="tab-chat" class="tab">
+    <div class="card center"><div class="mut small">رقمك الخاص</div><b id="myNum" style="font-size:22px;letter-spacing:1px;color:var(--gold)">...</b></div>
+    <div class="ctl"><button id="chNew" class="btn gold">➕ محادثة برقم</button><button id="chGrp" class="btn ghost">👥 مجموعة</button><button id="chJoin" class="btn ghost">🔗 انضمام</button></div>
+    <div id="chList"></div>
+  </section>
+
   <section id="tab-me" class="tab">
     <div class="card center"><input id="nameIn" maxlength="20" placeholder="اسمك"></div>
     <div class="card" id="statsCard"></div>
@@ -52,9 +58,12 @@
 <nav>
   <button data-tab="home" class="on"><i>📿</i>تسبيح</button>
   <button data-tab="az"><i>🕌</i>الأذكار</button>
+  <button data-tab="chat"><i>💬</i>محادثات</button>
   <button data-tab="me"><i>👤</i>حسابي</button>
 </nav>
 
+<div id="cv" class="hidden"><div class="cvh"><button id="cvBack">→</button><b id="cvT"></b><button id="cvInv" hidden>🔗</button></div><div id="msgs"></div>
+<div class="cvc"><label class="ib">🖼<input id="imgF" type="file" accept="image/*" hidden></label><button id="mic" class="ib">🎤</button><input id="msgIn" maxlength="1000" placeholder="اكتب رسالة"><button id="sendB" class="ib">➤</button></div></div>
 <div id="welcome" class="overlay hidden"><div class="sheet">
   <h2>أهلاً فيك 🌙</h2>
   <p class="mut">كل يوم 3 مهام صغيرة وهدية، وتنبيهات لطيفة تذكّرك</p>

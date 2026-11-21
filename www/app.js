@@ -34,7 +34,7 @@ const LEVELS = [[0, 'مبتدئ', '🌱'], [100, 'ذاكر', '🌿'], [1000, 'م
 const TOT = [100, 150, 200, 300], DM = [['p', 50], ['g', 100], ['l', 100], ['w', 100], ['q', 100], ['h', 100], ['s', 99]], AZ = ['m', 'e', 'a', 's'];
 const TGT = [-1, 33, 100, 0];
 
-const defaults = { uid: null, refresh: null, reg: false, dauD: '', seen: {}, clk: {}, adHide: '', name: '', total: 0, counts: {}, day: '', today: 0, td: {}, md: [], az: {}, ap: {}, chest: '', dhikr: 's', tgt: -1, vib: true, nf: true, streak: 0, best: 0, lastDay: '', freeze: 0, cards: [], joined: Date.now() };
+const defaults = { uid: null, refresh: null, reg: false, dauD: '', seen: {}, clk: {}, adHide: '', num: '', name: '', total: 0, counts: {}, day: '', today: 0, td: {}, md: [], az: {}, ap: {}, chest: '', dhikr: 's', tgt: -1, vib: true, nf: true, streak: 0, best: 0, lastDay: '', freeze: 0, cards: [], joined: Date.now() };
 let S;
 try { S = Object.assign({}, defaults, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { S = Object.assign({}, defaults); }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
@@ -261,16 +261,18 @@ async function showAd() {
   try {
     box.innerHTML = ''; if (S.adHide === S.day) return;
     const j = await fb('ads.json') || {};
-    const L = Object.entries(j).filter(([id, a]) => okId(id) && a && a.on === true && a.views < a.max && typeof a.title === 'string' && (okUrl(a.img) || okUrl(a.vid)) && (!S.seen[id] || S.seen[id] === S.day));
+    const L = Object.entries(j).filter(([id, a]) => okId(id) && a && a.on === true && a.views < a.max && typeof a.title === 'string' && (okUrl(a.img) || okUrl(a.vid) || a.pic === true) && (!S.seen[id] || S.seen[id] === S.day));
     if (!L.length) return;
     const [id, a] = L[Math.floor(Math.random() * L.length)];
     const card = document.createElement('div'); card.className = 'adc';
     const tag = document.createElement('span'); tag.className = 'adl'; tag.textContent = 'إعلان';
     const x = document.createElement('button'); x.className = 'adx'; x.textContent = '✕';
     x.onclick = e => { e.stopPropagation(); S.adHide = S.day; save(); box.innerHTML = ''; };
+    let pic = null;
+    if (a.pic === true) { pic = await fb('adimg/' + id + '.json'); if (typeof pic !== 'string' || pic.indexOf('data:image/jpeg;base64,') !== 0 || pic.length > 300000) return; }
     let m;
     if (okUrl(a.vid)) { m = document.createElement('video'); m.muted = true; m.loop = true; m.autoplay = true; m.playsInline = true; m.setAttribute('playsinline', ''); m.src = a.vid; if (okUrl(a.img)) m.poster = a.img; }
-    else { m = document.createElement('img'); m.alt = ''; m.src = a.img; }
+    else { m = document.createElement('img'); m.alt = ''; m.src = pic || a.img; }
     const t = document.createElement('div'); t.className = 'adt'; t.textContent = a.title;
     const d = document.createElement('div'); d.className = 'mut small'; d.textContent = a.text || '';
     card.append(tag, x, m, t, d); box.appendChild(card);
@@ -289,11 +291,154 @@ async function showAd() {
   } catch (e) {} finally { adBusy = false; }
 }
 
+/* ---------- المحادثات (واتساب) ---------- */
+const rnd = () => Math.random().toString(36).slice(2, 6);
+const mkId = () => Date.now().toString(36).padStart(9, '0') + rnd();
+const fnum = n => String(n).replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3');
+const NAMES = {}; let CUR = null, pollT = null, listT = null, rec = null;
+async function nameOf(u) {
+  if (NAMES[u]) return NAMES[u];
+  try { const n = await fb('profiles/' + u + '/name.json'); NAMES[u] = typeof n === 'string' ? n : 'مستخدم'; } catch (e) { NAMES[u] = 'مستخدم'; }
+  return NAMES[u];
+}
+async function ensureNum() {
+  if (S.num) return true;
+  if (!ONLINE) return false;
+  await auth();
+  try { const n = await fb('profiles/' + S.uid + '/num.json'); if (typeof n === 'string') { S.num = n; save(); return true; } } catch (e) {}
+  for (let i = 0; i < 8; i++) {
+    const n = String(100000000 + Math.floor(Math.random() * 900000000));
+    try { await fb('.json', 'PATCH', { ['numbers/' + n]: S.uid, ['profiles/' + S.uid + '/num']: n, ['profiles/' + S.uid + '/name']: S.name || 'مستخدم' }); S.num = n; save(); return true; } catch (e) {}
+  }
+  return false;
+}
+function ask(t, ph, cb) {
+  $('#mBody').innerHTML = '<h3>' + t + '</h3><input id="qIn" placeholder="' + ph + '"><button class="btn gold wide" id="qOk">تمام</button><button class="btn ghost wide" id="qNo">إلغاء</button>';
+  $('#modal').classList.remove('hidden');
+  $('#qNo').onclick = () => $('#modal').classList.add('hidden');
+  $('#qOk').onclick = () => { const v = $('#qIn').value.trim(); $('#modal').classList.add('hidden'); cb(v); };
+}
+async function chatInit() {
+  clearInterval(listT);
+  if (!ONLINE) { $('#myNum').textContent = 'تحتاج إنترنت'; return; }
+  $('#myNum').textContent = '...';
+  if (!(await ensureNum())) { $('#myNum').textContent = 'تعذر إنشاء الرقم، جرّب لاحقًا'; return; }
+  $('#myNum').textContent = fnum(S.num);
+  loadList(); listT = setInterval(() => { if ($('#tab-chat').classList.contains('active') && !CUR) loadList(); }, 8000);
+}
+async function loadList() {
+  if (!S.num) return;
+  let j = {}; try { j = await fb('inbox/' + S.uid + '.json') || {}; } catch (e) { return; }
+  const rows = await Promise.all(Object.entries(j).sort((a, b) => b[1].t - a[1].t).map(async ([cid, v]) => {
+    let t;
+    if (v.g) { let n = null; try { n = await fb('groups/' + cid + '/n.json'); } catch (e) {} t = '👥 ' + (n || 'مجموعة'); } else t = '👤 ' + await nameOf(v.w);
+    return [cid, v, t];
+  }));
+  const box = $('#chList'); box.innerHTML = rows.length ? '' : '<div class="mut center small">ما عندك محادثات بعد</div>';
+  rows.forEach(([cid, v, t]) => { const d = document.createElement('div'); d.className = 'chi'; d.textContent = t; d.onclick = () => openChat(cid, v.g ? { g: true, title: t } : { w: v.w, title: t }); box.appendChild(d); });
+}
+function openChat(cid, o) {
+  CUR = { cid, g: !!o.g, w: o.w, shown: {} };
+  $('#cvT').textContent = o.title; $('#cvInv').hidden = !o.g; $('#msgs').innerHTML = ''; $('#cv').classList.remove('hidden');
+  clearInterval(pollT); pollMsgs(); pollT = setInterval(pollMsgs, 3000);
+}
+function closeChat() { clearInterval(pollT); CUR = null; $('#cv').classList.add('hidden'); loadList(); }
+async function pollMsgs() {
+  if (!CUR || !navigator.onLine) return; const c = CUR;
+  try {
+    const j = await fb('msgs/' + c.cid + '.json?orderBy=%22$key%22&limitToLast=50') || {}; if (CUR !== c) return;
+    const box = $('#msgs'), stick = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    for (const [id, m] of Object.entries(j).sort((a, b) => a[0] < b[0] ? -1 : 1)) { if (c.shown[id]) continue; c.shown[id] = 1; await addBubble(id, m, c); }
+    if (stick || !c.init) { box.scrollTop = box.scrollHeight; c.init = 1; }
+  } catch (e) {}
+}
+async function addBubble(id, m, c) {
+  const mine = m.f === S.uid, d = document.createElement('div'); d.className = 'bb ' + (mine ? 'me' : 'ot');
+  if (c.g && !mine) { const s = document.createElement('div'); s.className = 'bs'; s.textContent = await nameOf(m.f); d.appendChild(s); }
+  const b = document.createElement('div');
+  if (m.k === 't') b.textContent = String(m.x || '');
+  else {
+    b.className = 'bm'; b.textContent = m.k === 'i' ? '🖼 اضغط للعرض' : '🎤 اضغط للتشغيل';
+    b.onclick = async () => {
+      try {
+        const u = await fb('media/' + c.cid + '/' + id + '.json'); if (typeof u !== 'string') return;
+        if (m.k === 'i' && u.indexOf('data:image/jpeg;base64,') === 0) { const im = document.createElement('img'); im.src = u; b.replaceWith(im); }
+        else if (m.k === 'a' && u.indexOf('data:audio/') === 0) new Audio(u).play();
+      } catch (e) { toast('تعذر التحميل'); }
+    };
+  }
+  d.appendChild(b);
+  const t = document.createElement('div'); t.className = 'bt'; t.textContent = new Date(Number(m.t) || 0).toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
+  d.appendChild(t); $('#msgs').appendChild(d);
+}
+async function send(k, x, media) {
+  if (!CUR || !ONLINE) return; const c = CUR, id = mkId(), now = Date.now(), up = {}, m = { f: S.uid, t: now, k };
+  if (k === 't') m.x = x; else { m.m = true; up['media/' + c.cid + '/' + id] = media; }
+  up['msgs/' + c.cid + '/' + id] = m;
+  up['inbox/' + S.uid + '/' + c.cid] = c.g ? { t: now, g: true } : { t: now, w: c.w };
+  if (!c.g) up['inbox/' + c.w + '/' + c.cid] = { t: now, w: S.uid };
+  try { await fb('.json', 'PATCH', up); pollMsgs(); } catch (e) { toast('تعذر الإرسال'); }
+}
+function sendImg(f) {
+  if (!f) return; const im = new Image();
+  im.onload = () => {
+    const w = Math.min(640, im.width), h = Math.round(im.height * w / im.width), c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(im, 0, 0, w, h);
+    let q = .8, d; do { d = c.toDataURL('image/jpeg', q); q -= .1; } while (d.length > 150000 && q > .2);
+    if (d.length > 240000) return toast('الصورة كبيرة'); send('i', null, d);
+  };
+  im.onerror = () => toast('ملف غير صالح'); im.src = URL.createObjectURL(f);
+}
+async function toggleRec() {
+  if (rec) { rec.stop(); return; }
+  try {
+    const st = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+    const r = new MediaRecorder(st, mime ? { mimeType: mime, audioBitsPerSecond: 16000 } : { audioBitsPerSecond: 16000 }), ch = [];
+    r.ondataavailable = e => { if (e.data.size) ch.push(e.data); };
+    const to = setTimeout(() => { if (r.state === 'recording') r.stop(); }, 45000);
+    r.onstop = () => {
+      clearTimeout(to); st.getTracks().forEach(t => t.stop()); rec = null; $('#mic').textContent = '🎤';
+      const b = new Blob(ch, { type: r.mimeType || 'audio/webm' }); if (b.size > 150000) return toast('التسجيل طويل');
+      const fr = new FileReader(); fr.onload = () => send('a', null, fr.result); fr.readAsDataURL(b);
+    };
+    r.start(); rec = r; $('#mic').textContent = '⏹';
+  } catch (e) { toast('ما قدرت أستخدم المايك'); }
+}
+function bindChat() {
+  $('#chNew').onclick = () => ask('رقم الشخص', '123456789', async v => {
+    v = v.replace(/\D/g, ''); if (!/^[1-9]\d{8}$/.test(v)) return toast('الرقم لازم 9 أرقام'); if (v === S.num) return toast('هذا رقمك');
+    try { const u = await fb('numbers/' + v + '.json'); if (typeof u !== 'string') return toast('ما في أحد بهذا الرقم'); openChat([S.uid, u].sort().join('_'), { w: u, title: '👤 ' + await nameOf(u) }); } catch (e) { toast('تعذر البحث'); }
+  });
+  $('#chGrp').onclick = () => ask('اسم المجموعة', 'مثال: الأصدقاء', async nme => {
+    if (!nme) return; const code = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');
+    try {
+      const r = await fb('groups.json', 'POST', { n: nme.slice(0, 40), o: S.uid, v: code, t: Date.now(), mem: { [S.uid]: code } });
+      await fb('inbox/' + S.uid + '/' + r.name + '.json', 'PUT', { t: Date.now(), g: true }); openChat(r.name, { g: true, title: '👥 ' + nme.slice(0, 40) });
+    } catch (e) { toast('تعذر إنشاء المجموعة'); }
+  });
+  $('#chJoin').onclick = () => ask('الصق رابط المجموعة', 'ksjs://join/...', async v => {
+    const m = v.match(/join\/([-\w]{10,40})\/([a-z0-9]{10,30})/i); if (!m) return toast('الرابط غير صحيح');
+    try {
+      const n = await fb('groups/' + m[1] + '/n.json'); if (!n) return toast('المجموعة غير موجودة');
+      await fb('.json', 'PATCH', { ['groups/' + m[1] + '/mem/' + S.uid]: m[2], ['inbox/' + S.uid + '/' + m[1]]: { t: Date.now(), g: true } }); openChat(m[1], { g: true, title: '👥 ' + n });
+    } catch (e) { toast('الرابط منتهي أو غير صحيح'); }
+  });
+  $('#cvBack').onclick = closeChat;
+  $('#cvInv').onclick = async () => {
+    try { const v = await fb('groups/' + CUR.cid + '/v.json'); const l = 'ksjs://join/' + CUR.cid + '/' + v; try { navigator.clipboard.writeText(l); } catch (e) {} modal('<h3>رابط المجموعة</h3><p class="mut small">انسخه وأرسله لأي أحد، وهو يلصقه في «انضمام برابط». أي شخص معه الرابط يدخل.</p><div class="gift small" style="word-break:break-all;font-size:13px;direction:ltr">' + esc(l) + '</div>'); } catch (e) { toast('تعذر'); }
+  };
+  const go = () => { const i = $('#msgIn'), v = i.value.trim(); if (!v) return; i.value = ''; send('t', v.slice(0, 1000)); };
+  $('#sendB').onclick = go; $('#msgIn').addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  $('#imgF').onchange = e => { sendImg(e.target.files[0]); e.target.value = ''; };
+  $('#mic').onclick = toggleRec;
+}
+
 /* ---------- ربط الأحداث ---------- */
 function switchTab(t) {
   $$('.tab').forEach(x => x.classList.toggle('active', x.id === 'tab-' + t));
   $$('nav button').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
   if (t === 'az') renderAz(); if (t === 'me') renderMe();
+  if (t === 'chat') chatInit();
 }
 function init() {
   roll(); renderDhikrs(); render(); renderMe();
@@ -314,13 +459,13 @@ function init() {
     save(); renderAz();
   });
   $('#coll').addEventListener('click', e => { const c = e.target.closest('[data-c]'); if (c) modal('<div class="gift">' + esc(CARDS[+c.dataset.c]) + '</div>'); });
-  $('#nameIn').addEventListener('change', e => { S.name = e.target.value.trim().slice(0, 20); save(); });
+  $('#nameIn').addEventListener('change', e => { S.name = e.target.value.trim().slice(0, 20); save(); if (S.num) fb('profiles/' + S.uid + '/name.json', 'PUT', S.name || 'مستخدم').catch(() => {}); });
   $('#nfBtn').onclick = () => { S.nf = !S.nf; save(); renderMe(); setupNotifs(); };
   $('#uGo').onclick = doUpdate; $('#uLater').onclick = () => $('#update').classList.add('hidden');
   $('#startW').onclick = () => { S.name = $('#nameW').value.trim().slice(0, 20); save(); $('#welcome').classList.add('hidden'); renderMe(); setupNotifs(); };
   if (!S.joined || !localStorage.getItem(KEY)) { S.joined = Date.now(); save(); $('#welcome').classList.remove('hidden'); } else setupNotifs();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { roll(); render(); checkUpdate(); setupNotifs(); net(); } });
-  checkUpdate(); net();
+  bindChat(); checkUpdate(); net();
 }
 init();
 })();
