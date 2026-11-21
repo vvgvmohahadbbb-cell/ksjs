@@ -1,170 +1,141 @@
 (() => {
 'use strict';
-const C = window.CFG || {};
-const P = (window.Capacitor && window.Capacitor.Plugins) || {};
-const ONLINE = !!C.FB_API_KEY && !/PASTE/.test(C.FB_API_KEY) && !!C.FB_DB_URL && !/PROJECT/.test(C.FB_DB_URL);
-const DB = (C.FB_DB_URL || '').replace(/\/$/, '');
-const VER = window.APP_VERSION || 0;
-const $ = s => document.querySelector(s);
-const $$ = s => Array.from(document.querySelectorAll(s));
-const enc = encodeURIComponent;
-
+const C = window.CFG || {}, P = (window.Capacitor && window.Capacitor.Plugins) || {}, VER = window.APP_VERSION || 0;
+const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
+const fmt = n => Number(n || 0).toLocaleString('en-US');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const KEY = 'tasbeeh_v2';
+const AK = 'اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ لَهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الْأَرْضِ مَن ذَا الَّذِي يَشْفَعُ عِندَهُ إِلَّا بِإِذْنِهِ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ وَلَا يُحِيطُونَ بِشَيْءٍ مِّنْ عِلْمِهِ إِلَّا بِمَا شَاءَ وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالْأَرْضَ وَلَا يَئُودُهُ حِفْظُهُمَا وَهُوَ الْعَلِيُّ الْعَظِيمُ';
+// [id, نص, الدورة الافتراضية, الفضل]
 const DHIKR = [
-  { id: 's', t: 'سبحان الله' }, { id: 'h', t: 'الحمد لله' }, { id: 'a', t: 'الله أكبر' },
-  { id: 'l', t: 'لا إله إلا الله' }, { id: 'g', t: 'أستغفر الله' }, { id: 'p', t: 'اللهم صلّ على محمد' }
+  ['s', 'سبحان الله', 33, 'أحب الكلام إلى الله أربع: سبحان الله والحمد لله ولا إله إلا الله والله أكبر (مسلم)'],
+  ['h', 'الحمد لله', 33, 'الحمد لله تملأ الميزان (مسلم)'],
+  ['a', 'الله أكبر', 34, 'من أحب الكلام إلى الله (مسلم)'],
+  ['l', 'لا إله إلا الله', 100, 'أفضل الذكر لا إله إلا الله (الترمذي)'],
+  ['g', 'أستغفر الله', 100, 'كان النبي ﷺ يستغفر الله في اليوم أكثر من سبعين مرة (البخاري)'],
+  ['p', 'اللهم صلّ على محمد', 100, 'من صلى علي صلاة صلى الله عليه بها عشرًا (مسلم)'],
+  ['w', 'سبحان الله وبحمده', 100, 'من قالها مئة مرة حُطّت خطاياه وإن كانت مثل زبد البحر (متفق عليه)'],
+  ['q', 'لا حول ولا قوة إلا بالله', 100, 'كنز من كنوز الجنة (متفق عليه)'],
+  ['v', 'حسبنا الله ونعم الوكيل', 100, 'قالها إبراهيم عليه السلام حين أُلقي في النار (البخاري)']
+];
+const ADH = [['آية الكرسي: ' + AK, 1], ['بسم الله الذي لا يضر مع اسمه شيء في الأرض ولا في السماء وهو السميع العليم', 3], ['رضيت بالله ربًا وبالإسلام دينًا وبمحمد ﷺ نبيًا', 3], ['حسبي الله لا إله إلا هو عليه توكلت وهو رب العرش العظيم', 7], ['اللهم أنت ربي لا إله إلا أنت خلقتني وأنا عبدك وأنا على عهدك ووعدك ما استطعت، أعوذ بك من شر ما صنعت، أبوء لك بنعمتك علي وأبوء بذنبي فاغفر لي فإنه لا يغفر الذنوب إلا أنت', 1], ['سبحان الله وبحمده', 100]];
+const SETS = {
+  m: ['أذكار الصباح', ADH], e: ['أذكار المساء', ADH],
+  a: ['بعد الصلاة', [['أستغفر الله', 3], ['اللهم أنت السلام ومنك السلام تباركت يا ذا الجلال والإكرام', 1], ['سبحان الله', 33], ['الحمد لله', 33], ['الله أكبر', 34], ['لا إله إلا الله وحده لا شريك له، له الملك وله الحمد وهو على كل شيء قدير', 1]]],
+  s: ['أذكار النوم', [['آية الكرسي: ' + AK, 1], ['اللهم باسمك أموت وأحيا', 1], ['اللهم قني عذابك يوم تبعث عبادك', 3], ['سبحان الله', 33], ['الحمد لله', 33], ['الله أكبر', 34]]]
+};
+const CARDS = [
+  'رَبَّنَا آتِنَا فِي الدُّنْيَا حَسَنَةً وَفِي الْآخِرَةِ حَسَنَةً وَقِنَا عَذَابَ النَّارِ', 'رَبِّ اشْرَحْ لِي صَدْرِي وَيَسِّرْ لِي أَمْرِي', 'رَبِّ زِدْنِي عِلْمًا',
+  'لَا إِلَٰهَ إِلَّا أَنتَ سُبْحَانَكَ إِنِّي كُنتُ مِنَ الظَّالِمِينَ', 'رَبِّ إِنِّي لِمَا أَنزَلْتَ إِلَيَّ مِنْ خَيْرٍ فَقِيرٌ', 'رَبِّ اجْعَلْنِي مُقِيمَ الصَّلَاةِ وَمِن ذُرِّيَّتِي',
+  'رَبَّنَا هَبْ لَنَا مِنْ أَزْوَاجِنَا وَذُرِّيَّاتِنَا قُرَّةَ أَعْيُنٍ وَاجْعَلْنَا لِلْمُتَّقِينَ إِمَامًا', 'رَبِّ أَوْزِعْنِي أَنْ أَشْكُرَ نِعْمَتَكَ الَّتِي أَنْعَمْتَ عَلَيَّ',
+  'رَبَّنَا اغْفِرْ لَنَا ذُنُوبَنَا وَإِسْرَافَنَا فِي أَمْرِنَا وَثَبِّتْ أَقْدَامَنَا', 'اللَّهُمَّ إِنَّكَ عَفُوٌّ تُحِبُّ الْعَفْوَ فَاعْفُ عَنِّي', 'حَسْبِيَ اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ عَلَيْهِ تَوَكَّلْتُ وَهُوَ رَبُّ الْعَرْشِ الْعَظِيمِ', 'رَبَّنَا تَقَبَّلْ مِنَّا إِنَّكَ أَنتَ السَّمِيعُ الْعَلِيمُ'
 ];
 const LEVELS = [[0, 'مبتدئ', '🌱'], [100, 'ذاكر', '🌿'], [1000, 'مداوم', '🌙'], [5000, 'سابق', '⭐'], [20000, 'قنديل', '🏮'], [50000, 'نور', '💎'], [100000, 'أسطورة', '👑']];
-const GOALS = [100, 300, 500, 1000];
-const KEY = 'tasbeeh_v1';
+const TOT = [100, 150, 200, 300], DM = [['p', 50], ['g', 100], ['l', 100], ['w', 100], ['q', 100], ['h', 100], ['s', 99]], AZ = ['m', 'e', 'a', 's'];
+const TGT = [-1, 33, 100, 0];
 
-const defaults = { uid: null, refresh: null, name: '', photo: '', total: 0, counts: {}, day: '', today: 0, goal: 100, streak: 0, best: 0, lastGoalDay: '', dhikr: 's', dirty: true, profDay: '', lastRank: 0, joined: Date.now() };
+const defaults = { uid: null, refresh: null, reg: false, dauD: '', seen: {}, clk: {}, adHide: '', name: '', total: 0, counts: {}, day: '', today: 0, td: {}, md: [], az: {}, ap: {}, chest: '', dhikr: 's', tgt: -1, vib: true, nf: true, streak: 0, best: 0, lastDay: '', freeze: 0, cards: [], joined: Date.now() };
 let S;
 try { S = Object.assign({}, defaults, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { S = Object.assign({}, defaults); }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
-
-const dayKey = (t) => new Date((t || Date.now()) + 3 * 36e5).toISOString().slice(0, 10);
-const roll = () => { const d = dayKey(); if (S.day !== d) { S.day = d; S.today = 0; } };
-const fmt = n => Number(n || 0).toLocaleString('en-US');
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const dayKey = t => new Date((t || Date.now()) + 3 * 36e5).toISOString().slice(0, 10);
+const roll = () => { const d = dayKey(); if (S.day !== d) { S.day = d; S.today = 0; S.td = {}; S.md = []; S.az = {}; S.ap = {}; } };
 const lvl = t => { let i = 0; LEVELS.forEach((l, k) => { if (t >= l[0]) i = k; }); return i; };
-const streakNow = () => (S.lastGoalDay && (S.lastGoalDay === dayKey() || S.lastGoalDay === dayKey(Date.now() - 864e5))) ? S.streak : 0;
-const avatar = (photo, name) => (typeof photo === 'string' && photo.indexOf('data:image/jpeg;base64,') === 0)
-  ? '<img alt="" src="' + photo + '">' : '<span>' + esc((name || '؟').trim().charAt(0) || '؟') + '</span>';
+const streakNow = () => { const y = dayKey(Date.now() - 864e5); return (S.lastDay === S.day || S.lastDay === y || (S.lastDay === dayKey(Date.now() - 1728e5) && S.freeze > 0)) ? S.streak : 0; };
+const D = id => DHIKR.find(x => x[0] === id) || DHIKR[0];
+const tgt = () => S.tgt < 0 ? D(S.dhikr)[2] : S.tgt;
 
 let toastT;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600); }
-function haptic(strong) {
-  try { if (P.Haptics) P.Haptics.impact({ style: strong ? 'HEAVY' : 'LIGHT' }); else if (navigator.vibrate) navigator.vibrate(strong ? 40 : 8); } catch (e) {}
+function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600); }
+function vib(strong) { if (!S.vib) return; try { if (P.Haptics) P.Haptics.impact({ style: strong ? 'HEAVY' : 'LIGHT' }); else if (navigator.vibrate) navigator.vibrate(strong ? 60 : 8); } catch (e) {} }
+function modal(h) { $('#mBody').innerHTML = h + '<button class="btn gold wide" id="mOk">تمام</button>'; $('#modal').classList.remove('hidden'); $('#mOk').onclick = () => $('#modal').classList.add('hidden'); }
+
+/* ---------- المهام اليومية ---------- */
+function missions() {
+  const n = Math.floor(Date.now() / 864e5), dm = DM[n % DM.length], az = AZ[n % AZ.length], t = TOT[n % TOT.length];
+  return [
+    { id: 't' + t, txt: 'سبّح ' + t + ' تسبيحة', n: t, p: S.today },
+    { id: 'd' + dm[0], txt: 'قل «' + D(dm[0])[1] + '» ' + dm[1] + ' مرة', n: dm[1], p: S.td[dm[0]] || 0 },
+    { id: 'z' + az, txt: 'أكمل ' + SETS[az][0], n: 1, p: S.az[az] === S.day ? 1 : 0, go: az }
+  ];
+}
+function bump() {
+  if (S.lastDay === S.day) return;
+  const y = dayKey(Date.now() - 864e5), y2 = dayKey(Date.now() - 1728e5);
+  if (S.lastDay === y) S.streak++;
+  else if (S.lastDay === y2 && S.freeze > 0) { S.freeze--; S.streak++; toast('🧊 استخدمنا إجازة وحافظنا على سلسلتك'); }
+  else S.streak = 1;
+  S.best = Math.max(S.best, S.streak); S.lastDay = S.day;
+  if (S.streak % 7 === 0) { S.freeze++; toast('🧊 كسبت إجازة سلسلة!'); } else toast('🔥 سلسلتك ' + S.streak + ' يوم');
+}
+function check() {
+  const ms = missions(); let nw = 0;
+  ms.forEach(m => { if (m.p >= m.n && S.md.indexOf(m.id) < 0) { S.md.push(m.id); nw++; } });
+  if (nw) { vib(true); if (S.md.length < 3) toast('✅ أنجزت مهمة! باقي ' + (3 - S.md.length)); }
+  if (S.md.length >= 2) bump();
+  if (S.md.length >= 3 && S.chest !== S.day) {
+    S.chest = S.day;
+    const left = CARDS.map((c, i) => i).filter(i => S.cards.indexOf(i) < 0), pool = left.length ? left : CARDS.map((c, i) => i), k = pool[Math.floor(Math.random() * pool.length)];
+    if (S.cards.indexOf(k) < 0) S.cards.push(k);
+    setTimeout(() => modal('<h2>🎁 أنجزت كل مهام اليوم</h2><p class="mut">هديتك: دعاء جديد في مجموعتك (' + S.cards.length + '/' + CARDS.length + ')</p><div class="gift">' + esc(CARDS[k]) + '</div><p class="mut small">ارجع بكرة لمهام جديدة وهدية جديدة</p>'), 400);
+  }
 }
 
-/* ---------- render ---------- */
+/* ---------- العرض ---------- */
 const CIRC = 848.2;
 function render() {
   roll();
-  const d = DHIKR.find(x => x.id === S.dhikr) || DHIKR[0];
-  $('#dh').textContent = d.t;
-  $('#cnt').textContent = fmt(S.counts[S.dhikr] || 0);
-  $('#ring').style.strokeDashoffset = CIRC * (1 - Math.min(1, S.today / S.goal));
-  $('#todayTxt').textContent = fmt(S.today) + ' / ' + fmt(S.goal);
-  $('#totalTxt').textContent = fmt(S.total);
-  $('#chStreak').textContent = '🔥 ' + streakNow();
-  const L = LEVELS[lvl(S.total)];
-  $('#chLevel').textContent = L[2] + ' ' + L[1];
-  $('#chRank').textContent = '🏆 ' + (S.lastRank ? '#' + fmt(S.lastRank) : '--');
+  const id = S.dhikr, d = D(id), t = tgt(), c = S.counts[id] || 0;
+  const rc = t ? (c && c % t === 0 ? t : c % t) : c;
+  $('#dh').textContent = d[1]; $('#cnt').textContent = fmt(rc); $('#fadl').textContent = d[3];
+  $('#ring').style.strokeDashoffset = CIRC * (1 - (t ? rc / t : (c % 100) / 100));
+  $('#stats').textContent = 'اليوم ' + fmt(S.today) + ' · المجموع ' + fmt(S.total) + (t ? ' · دورات ' + Math.floor(c / t) : '');
+  $('#tgtBtn').textContent = '🎯 ' + (t || '∞') + (S.tgt < 0 ? ' (تلقائي)' : '');
+  $('#vibBtn').textContent = S.vib ? '📳 اهتزاز' : '🔇 صامت';
+  $('#chStreak').textContent = '🔥 ' + streakNow(); $('#chFreeze').textContent = '🧊 ' + S.freeze;
+  const L = LEVELS[lvl(S.total)]; $('#chLevel').textContent = L[2] + ' ' + L[1];
+  const ms = missions();
+  $('#miss').innerHTML = '<div class="mh"><b>مهام اليوم</b><span class="mut small">' + Math.min(3, S.md.length) + '/3 · الهدية بعد الثلاث</span></div>' + ms.map(m => {
+    const done = S.md.indexOf(m.id) >= 0, pc = Math.min(100, Math.round(m.p / m.n * 100));
+    return '<div class="ms ' + (done ? 'ok' : '') + '" ' + (m.go ? 'data-go="' + m.go + '"' : '') + '><i>' + (done ? '✅' : '⭕') + '</i><div><div>' + esc(m.txt) + '</div><div class="bar"><i style="width:' + pc + '%"></i></div></div></div>';
+  }).join('');
 }
 function renderDhikrs() {
-  $('#dhikrs').innerHTML = DHIKR.map(d => '<button data-id="' + d.id + '" class="' + (d.id === S.dhikr ? 'on' : '') + '">' + d.t + '</button>').join('');
+  $('#dhikrs').innerHTML = DHIKR.map(d => '<button data-id="' + d[0] + '" class="' + (d[0] === S.dhikr ? 'on' : '') + '">' + d[1] + '</button>').join('');
+}
+let azSet = 'm';
+function renderAz() {
+  $('#azSeg').innerHTML = Object.keys(SETS).map(k => '<button data-k="' + k + '" class="' + (k === azSet ? 'on' : '') + '">' + SETS[k][0] + (S.az[k] === S.day ? ' ✅' : '') + '</button>').join('');
+  $('#azList').innerHTML = SETS[azSet][1].map((it, i) => {
+    const r = (S.ap[azSet] || [])[i]; const rem = r === undefined ? it[1] : r;
+    return '<div class="azc ' + (rem === 0 ? 'fin' : '') + '" data-i="' + i + '"><div class="azt">' + esc(it[0]) + '</div><div class="azn">' + (rem === 0 ? '✔' : '×' + rem) + '</div></div>';
+  }).join('');
 }
 function renderMe() {
-  $('#avMe').innerHTML = avatar(S.photo, S.name);
   $('#nameIn').value = S.name;
-  $('#goals').innerHTML = GOALS.map(g => '<button data-g="' + g + '" class="' + (g === S.goal ? 'on' : '') + '">' + g + '</button>').join('');
   const days = Math.max(1, Math.ceil((Date.now() - S.joined) / 864e5));
   $('#statsCard').innerHTML = '<div class="stats2"><div><b>' + fmt(S.total) + '</b><span class="mut small">المجموع</span></div><div><b>' + streakNow() + '</b><span class="mut small">السلسلة</span></div><div><b>' + S.best + '</b><span class="mut small">أفضل سلسلة</span></div><div><b>' + days + '</b><span class="mut small">يوم معنا</span></div></div>';
+  $('#coll').innerHTML = CARDS.map((c, i) => S.cards.indexOf(i) >= 0 ? '<div class="cd on" data-c="' + i + '">📜</div>' : '<div class="cd">🔒</div>').join('');
   const cur = lvl(S.total);
   $('#badges').innerHTML = LEVELS.map((l, i) => '<div class="badge ' + (i <= cur ? 'on' : '') + '">' + l[2] + ' ' + l[1] + '<div class="mut small">' + fmt(l[0]) + '</div></div>').join('');
+  $('#nfBtn').textContent = S.nf ? '🔔 التنبيهات: شغّالة' : '🔕 التنبيهات: مطفية';
   $('#verTxt').textContent = 'النسخة ' + VER;
 }
 
-/* ---------- tapping ---------- */
-let syncT = null;
+/* ---------- التسبيح ---------- */
 function tap() {
   roll();
-  const prevLvl = lvl(S.total);
-  S.total++; S.today++;
-  const c = S.counts[S.dhikr] = (S.counts[S.dhikr] || 0) + 1;
-  haptic(c % 33 === 0);
-  if (S.today >= S.goal && S.lastGoalDay !== S.day) {
-    S.streak = (S.lastGoalDay === dayKey(Date.now() - 864e5)) ? S.streak + 1 : 1;
-    S.best = Math.max(S.best, S.streak);
-    S.lastGoalDay = S.day;
-    toast('🎉 أكملت هدف اليوم! سلسلتك ' + S.streak + ' 🔥');
-  } else if (lvl(S.total) > prevLvl) {
-    const L = LEVELS[lvl(S.total)];
-    toast('⬆️ مستوى جديد: ' + L[2] + ' ' + L[1]);
-  } else if (c % 33 === 0) {
-    toast('✨ ' + c + ' — ما شاء الله');
-  }
-  render(); save();
-  if (!syncT) syncT = setTimeout(() => { syncT = null; sync(); }, 5000);
+  const id = S.dhikr, t = tgt(), pl = lvl(S.total);
+  S.total++; S.today++; S.td[id] = (S.td[id] || 0) + 1;
+  const c = S.counts[id] = (S.counts[id] || 0) + 1, endR = t && c % t === 0;
+  vib(endR);
+  if (lvl(S.total) > pl) { const L = LEVELS[lvl(S.total)]; toast('⬆️ مستوى جديد: ' + L[2] + ' ' + L[1]); }
+  else if (endR) toast('✅ أكملت دورة ' + (c / t) + ' — ما شاء الله');
+  check(); render(); save();
 }
-
-/* ---------- firebase (REST + anonymous auth) ---------- */
-let tok = null, tokExp = 0, syncing = false;
-async function auth() {
-  if (tok && tokExp > Date.now() + 60000) return;
-  let j;
-  if (S.refresh) {
-    const r = await fetch('https://securetoken.googleapis.com/v1/token?key=' + C.FB_API_KEY, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=refresh_token&refresh_token=' + enc(S.refresh) });
-    j = await r.json();
-    if (j.id_token) { tok = j.id_token; tokExp = Date.now() + (+j.expires_in) * 1000; S.uid = j.user_id; save(); return; }
-  }
-  const r2 = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + C.FB_API_KEY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ returnSecureToken: true }) });
-  j = await r2.json();
-  if (!j.idToken) throw new Error('auth');
-  tok = j.idToken; tokExp = Date.now() + (+j.expiresIn) * 1000; S.refresh = j.refreshToken; S.uid = j.localId; S.dirty = true; save();
-}
-async function sync() {
-  if (!ONLINE || syncing || !S.name) return;
-  syncing = true;
-  try {
-    await auth();
-    roll();
-    const u = S.uid, d = S.day, up = {};
-    up['users/' + u + '/total'] = S.total;
-    up['scores/' + u] = S.total;
-    up['daily/' + d + '/' + u + '/n'] = S.today;
-    if (S.dirty || S.profDay !== d) {
-      up['users/' + u + '/name'] = S.name;
-      up['users/' + u + '/photo'] = S.photo || '';
-      up['daily/' + d + '/' + u + '/name'] = S.name;
-      up['daily/' + d + '/' + u + '/p'] = S.photo || '';
-    }
-    const r = await fetch(DB + '/.json?auth=' + tok, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(up) });
-    if (r.ok) { S.dirty = false; S.profDay = d; save(); }
-  } catch (e) { /* offline: retry next time */ }
-  syncing = false;
-}
-async function fetchMyRank() {
-  if (!ONLINE || !S.uid) return;
-  try {
-    const r = await fetch(DB + '/scores.json?orderBy=' + enc('"$value"') + '&startAt=' + (S.total + 1) + '&limitToFirst=5000');
-    const j = await r.json();
-    if (!j || j.error) return;
-    const rank = Object.keys(j).filter(k => k !== S.uid).length + 1;
-    if (S.lastRank && rank < S.lastRank) toast('🚀 تقدمت ' + (S.lastRank - rank) + ' مراتب!');
-    else if (S.lastRank && rank > S.lastRank) toast('😤 ' + (rank - S.lastRank) + ' تخطّوك، كمّل!');
-    S.lastRank = rank; save(); render();
-  } catch (e) {}
-}
-
-/* ---------- leaderboard ---------- */
-let boardTab = 'all', boardAll = [];
-async function loadBoard(silent) {
-  const box = $('#board');
-  if (!ONLINE) { box.innerHTML = '<div class="card mut center">الترتيب يحتاج إعداد Firebase في ملف config.js</div>'; $('#myRank').innerHTML = ''; return; }
-  if (!silent) box.innerHTML = '<div class="card mut center">جاري التحميل...</div>';
-  try {
-    await sync();
-    const q = boardTab === 'all' ? 'users.json?orderBy=' + enc('"total"') + '&limitToLast=100' : 'daily/' + dayKey() + '.json?orderBy=' + enc('"n"') + '&limitToLast=100';
-    const j = await (await fetch(DB + '/' + q)).json();
-    if (j && j.error) throw new Error(j.error);
-    const rows = Object.entries(j || {}).map(([id, v]) => ({ id, name: v.name || 'بدون اسم', photo: v.photo || v.p || '', n: (boardTab === 'all' ? v.total : v.n) || 0 })).sort((a, b) => b.n - a.n);
-    if (boardTab === 'all') boardAll = rows;
-    if (boardTab === 'all') { fetchMyRank(); }
-    const medals = ['🥇', '🥈', '🥉'];
-    box.innerHTML = rows.length ? rows.map((r, i) => '<div class="row ' + (r.id === S.uid ? 'me' : '') + '"><div class="rk">' + (medals[i] || (i + 1)) + '</div><div class="avatar">' + avatar(r.photo, r.name) + '</div><div class="nm">' + esc(r.name) + '</div><div class="n">' + fmt(r.n) + '</div></div>').join('') : '<div class="card mut center">ما في أحد لسا، كن الأول 👑</div>';
-    const idx = rows.findIndex(r => r.id === S.uid);
-    const mine = boardTab === 'all' ? S.total : S.today;
-    $('#myRank').innerHTML = '<div class="center"><b>' + (boardTab === 'all' ? (S.lastRank ? 'ترتيبك #' + fmt(S.lastRank) : '') : (idx >= 0 ? 'ترتيبك اليوم #' + (idx + 1) : 'ترتيبك اليوم خارج أول 100')) + '</b><div class="mut small">' + fmt(mine) + ' تسبيحة</div></div>';
-    updateChase();
-  } catch (e) { box.innerHTML = '<div class="card mut center">تعذر تحميل الترتيب. تأكد من الإنترنت ومن قواعد Firebase.</div>'; }
-}
-function updateChase() {
-  const el = $('#chase'); const i = boardAll.findIndex(r => r.id === S.uid);
-  if (i === 0) el.textContent = '👑 أنت الأول! حافظ على الصدارة';
-  else if (i > 0) { const a = boardAll[i - 1]; el.textContent = 'باقي ' + fmt(Math.max(1, a.n - S.total + 1)) + ' وتتخطى ' + a.name; }
-  else el.textContent = '';
+function undo() {
+  const id = S.dhikr; if (!(S.counts[id] > 0)) return;
+  S.counts[id]--; S.total = Math.max(0, S.total - 1); S.today = Math.max(0, S.today - 1); S.td[id] = Math.max(0, (S.td[id] || 0) - 1); render(); save();
 }
 
 /* ---------- updates (GitHub Releases) ---------- */
@@ -213,72 +184,143 @@ async function doUpdate() {
   }
 }
 
-/* ---------- daily notifications ---------- */
+/* ---------- التنبيهات: 5 يوميًا × 7 أيام بنصوص متنوعة ---------- */
+const NT = [
+  [['🌅 صباح الخير', 'أذكار الصباح بانتظارك، وهدية اليوم جاهزة'], ['☀️ يوم جديد', 'ابدأ بمهمة صغيرة، دقيقتان تكفي'], ['📿 بداية مباركة', 'مهام اليوم الثلاث جاهزة، شوف إيش اليوم']],
+  [['⏳ خذ استراحة بذكر الله', 'مئة «سبحان الله وبحمده» وتحط عنك الخطايا'], ['🎯 مهمة بانتظارك', 'أنجز مهمة واحدة وكمّل سلسلتك'], ['💚 لحظة هدوء', 'قل «لا حول ولا قوة إلا بالله» عشر مرات']],
+  [['📿 لسا في وقت', 'باقي على مهام اليوم القليل، كمّلها'], ['🕌 تذكير لطيف', 'صلّ على النبي ﷺ فمن صلى عليه مرة صلى الله عليه عشرًا'], ['✨ دقيقة تكفي', 'افتح سبح وسبّح دورة واحدة']],
+  [['🌇 أذكار المساء', 'وقتها الآن، دقيقتان وتخلص'], ['🌙 مساء الخير', 'أذكار المساء وهدية اليوم بانتظارك'], ['📖 ختام النهار', 'اقرأ آية الكرسي وأذكار المساء']],
+  [['🔥 لا تخلّي السلسلة تنكسر', 'أنجز مهمتين قبل ما ينتهي اليوم'], ['🧊 آخر الليل', 'مهمة بسيطة تحافظ على سلسلتك'], ['🌃 قبل النوم', 'أذكار النوم وتسبيح فاطمة، وتنام على ذكر']]
+];
+const SL = [[6, 30], [11, 15], [15, 40], [18, 0], [21, 30]];
 async function setupNotifs() {
   const L = P.LocalNotifications; if (!L) return;
   try {
+    const pend = await L.getPending(); if (pend.notifications.length) await L.cancel({ notifications: pend.notifications });
+    if (!S.nf) return;
     const p = await L.requestPermissions(); if (p.display !== 'granted') return;
-    const st = streakNow();
-    const list = [
-      [1, 5, 30, '🌅 صباح الخير', 'ابدأ يومك بالتسبيح، والترتيب ينتظرك'],
-      [2, 13, 0, '📿 تذكير', 'دقيقة تسبيح تبارك يومك'],
-      [3, 21, 0, st ? '🔥 سلسلتك ' + st + ' يوم' : '🔥 لا تنسَ تسبيحك اليوم', 'أكمل هدفك قبل ما ينتهي اليوم وحافظ على مرتبتك']
-    ];
-    await L.schedule({ notifications: list.map(a => ({ id: a[0], title: a[3], body: a[4], schedule: { on: { hour: a[1], minute: a[2] } } })) });
+    const st = streakNow(), list = []; let id = 100;
+    for (let d = 0; d < 7; d++) SL.forEach((s, k) => {
+      const t = new Date(); t.setDate(t.getDate() + d); t.setHours(s[0], s[1] + ((d * 7 + k * 3) % 20), 0, 0);
+      if (t.getTime() < Date.now() + 6e4) return;
+      const m = NT[k][(d + k) % 3];
+      list.push({ id: id++, title: (k === 4 && st > 1 && d === 0) ? '🔥 سلسلتك ' + st + ' يوم' : m[0], body: m[1], schedule: { at: t, allowWhileIdle: true } });
+    });
+    if (list.length) await L.schedule({ notifications: list });
   } catch (e) {}
 }
 
-/* ---------- profile ---------- */
-function pickPhoto(file) {
-  return new Promise(res => {
-    if (!file) return res('');
-    const img = new Image(), url = URL.createObjectURL(file);
-    img.onload = () => {
-      const s = 72, c = document.createElement('canvas'); c.width = c.height = s;
-      const m = Math.min(img.width, img.height), sx = (img.width - m) / 2, sy = (img.height - m) / 2;
-      c.getContext('2d').drawImage(img, sx, sy, m, m, 0, 0, s, s);
-      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', 0.6));
-    };
-    img.onerror = () => res('');
-    img.src = url;
-  });
+/* ---------- السيرفر: إحصاءات + إعلانات ---------- */
+const enc = encodeURIComponent;
+const ONLINE = !!C.FB_API_KEY && !/PASTE/.test(C.FB_API_KEY) && /^https:\/\//.test(C.FB_DB_URL || '');
+const DB = (C.FB_DB_URL || '').replace(/\/$/, '');
+const okUrl = u => typeof u === 'string' && /^https:\/\/[^\s"'<>]{4,500}$/.test(u);
+const okId = i => /^[-\w]{1,40}$/.test(i);
+let tok = null, tokExp = 0, syncing = false;
+async function auth() {
+  if (tok && tokExp > Date.now() + 60000) return;
+  let j;
+  if (S.refresh) {
+    const r = await fetch('https://securetoken.googleapis.com/v1/token?key=' + C.FB_API_KEY, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=refresh_token&refresh_token=' + enc(S.refresh) });
+    j = await r.json();
+    if (j.id_token) { tok = j.id_token; tokExp = Date.now() + (+j.expires_in) * 1000; S.uid = j.user_id; save(); return; }
+  }
+  const r2 = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + C.FB_API_KEY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ returnSecureToken: true }) });
+  j = await r2.json();
+  if (!j.idToken) throw new Error('auth');
+  tok = j.idToken; tokExp = Date.now() + (+j.expiresIn) * 1000; S.refresh = j.refreshToken; S.uid = j.localId; S.dirty = true; save();
 }
-function profileChanged() { S.dirty = true; save(); renderMe(); sync(); }
+async function fb(path, method, body) {
+  await auth();
+  const r = await fetch(DB + '/' + path + (path.indexOf('?') >= 0 ? '&' : '?') + 'auth=' + tok, { method: method || 'GET', headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+async function net() {
+  if (!ONLINE || !navigator.onLine) return;
+  try {
+    await auth(); roll();
+    if (!S.reg) { try { await fb('.json', 'PATCH', { ['users/' + S.uid]: { t: Date.now(), v: VER } }); } catch (e) {} S.reg = true; }
+    if (S.dauD !== S.day) { try { await fb('.json', 'PATCH', { ['dau/' + S.day + '/' + S.uid]: true }); } catch (e) {} S.dauD = S.day; }
+    save(); showAd();
+  } catch (e) {}
+}
+async function count(kind, id, field) {
+  for (let i = 0; i < 3; i++) {
+    try {
+      const cur = await fb('ads/' + id + '/' + field + '.json');
+      await fb('.json', 'PATCH', { ['ads/' + id + '/' + field]: (typeof cur === 'number' ? cur : 0) + 1, [kind + '/' + id + '/' + S.uid]: true });
+      return true;
+    } catch (e) {}
+  }
+  return false;
+}
+let adBusy = false;
+async function showAd() {
+  const box = $('#ad'); if (!box || adBusy) return; adBusy = true;
+  try {
+    box.innerHTML = ''; if (S.adHide === S.day) return;
+    const j = await fb('ads.json') || {};
+    const L = Object.entries(j).filter(([id, a]) => okId(id) && a && a.on === true && a.views < a.max && typeof a.title === 'string' && (okUrl(a.img) || okUrl(a.vid)) && (!S.seen[id] || S.seen[id] === S.day));
+    if (!L.length) return;
+    const [id, a] = L[Math.floor(Math.random() * L.length)];
+    const card = document.createElement('div'); card.className = 'adc';
+    const tag = document.createElement('span'); tag.className = 'adl'; tag.textContent = 'إعلان';
+    const x = document.createElement('button'); x.className = 'adx'; x.textContent = '✕';
+    x.onclick = e => { e.stopPropagation(); S.adHide = S.day; save(); box.innerHTML = ''; };
+    let m;
+    if (okUrl(a.vid)) { m = document.createElement('video'); m.muted = true; m.loop = true; m.autoplay = true; m.playsInline = true; m.setAttribute('playsinline', ''); m.src = a.vid; if (okUrl(a.img)) m.poster = a.img; }
+    else { m = document.createElement('img'); m.alt = ''; m.src = a.img; }
+    const t = document.createElement('div'); t.className = 'adt'; t.textContent = a.title;
+    const d = document.createElement('div'); d.className = 'mut small'; d.textContent = a.text || '';
+    card.append(tag, x, m, t, d); box.appendChild(card);
+    if (okUrl(a.link)) card.onclick = () => {
+      if (!S.clk[id]) { S.clk[id] = 1; save(); count('adclick', id, 'clicks'); }
+      window.open(a.link, '_blank', 'noopener');
+    };
+    if (!S.seen[id] && 'IntersectionObserver' in window) {
+      let tm = null;
+      const io = new IntersectionObserver(es => {
+        if (es[0].isIntersecting) { if (!tm) tm = setTimeout(async () => { io.disconnect(); S.seen[id] = S.day; save(); count('adseen', id, 'views'); }, 1500); }
+        else { clearTimeout(tm); tm = null; }
+      }, { threshold: 0.6 });
+      io.observe(card);
+    }
+  } catch (e) {} finally { adBusy = false; }
+}
 
-/* ---------- wiring ---------- */
+/* ---------- ربط الأحداث ---------- */
 function switchTab(t) {
   $$('.tab').forEach(x => x.classList.toggle('active', x.id === 'tab-' + t));
   $$('nav button').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
-  if (t === 'rank') loadBoard(); if (t === 'me') renderMe();
+  if (t === 'az') renderAz(); if (t === 'me') renderMe();
 }
 function init() {
   roll(); renderDhikrs(); render(); renderMe();
   $('#tap').addEventListener('pointerdown', e => { e.preventDefault(); const b = $('#tap'); b.classList.add('pop'); tap(); setTimeout(() => b.classList.remove('pop'), 90); });
   $('#dhikrs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.dhikr = b.dataset.id; save(); renderDhikrs(); render(); });
-  $('#resetCnt').addEventListener('click', () => { S.counts[S.dhikr] = 0; save(); render(); });
+  $('#tgtBtn').onclick = () => { S.tgt = TGT[(TGT.indexOf(S.tgt) + 1) % TGT.length]; save(); render(); };
+  $('#vibBtn').onclick = () => { S.vib = !S.vib; save(); render(); };
+  $('#undo').onclick = undo;
+  $('#resetCnt').onclick = () => { S.counts[S.dhikr] = 0; save(); render(); };
+  $('#miss').addEventListener('click', e => { const m = e.target.closest('[data-go]'); if (m) { azSet = m.dataset.go; switchTab('az'); } });
   $$('nav button').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
-  $('#segAll').onclick = () => { boardTab = 'all'; $('#segAll').classList.add('on'); $('#segDay').classList.remove('on'); loadBoard(); };
-  $('#segDay').onclick = () => { boardTab = 'day'; $('#segDay').classList.add('on'); $('#segAll').classList.remove('on'); loadBoard(); };
-  $('#goals').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.goal = +b.dataset.g; save(); renderMe(); render(); });
-  $('#nameIn').addEventListener('change', e => { const v = e.target.value.trim().slice(0, 20); if (v) { S.name = v; profileChanged(); } });
-  $('#photoIn').addEventListener('change', async e => { S.photo = await pickPhoto(e.target.files[0]); profileChanged(); });
-  $('#uGo').onclick = doUpdate;
-  $('#uLater').onclick = () => $('#update').classList.add('hidden');
-
-  let tmpPhoto = '';
-  $('#photoW').addEventListener('change', async e => { tmpPhoto = await pickPhoto(e.target.files[0]); $('#avW').innerHTML = avatar(tmpPhoto, ''); });
-  $('#startW').onclick = () => {
-    const v = $('#nameW').value.trim().slice(0, 20); if (!v) { toast('اكتب اسمك أول'); return; }
-    S.name = v; S.photo = tmpPhoto; S.dirty = true; save(); $('#welcome').classList.add('hidden'); renderMe(); render(); sync(); setupNotifs();
-  };
-  if (!S.name) $('#welcome').classList.remove('hidden'); else setupNotifs();
-
-  document.addEventListener('visibilitychange', () => { if (document.hidden) sync(); else { roll(); render(); fetchMyRank(); checkUpdate(); } });
-  setInterval(() => { if (!document.hidden) { fetchMyRank(); if ($('#tab-rank').classList.contains('active')) loadBoard(true); } }, 45000);
-  checkUpdate(); sync().then(() => { fetchMyRank(); if (ONLINE) { boardTab = 'all'; loadBoardQuiet(); } });
-}
-async function loadBoardQuiet() {
-  try { const j = await (await fetch(DB + '/users.json?orderBy=' + enc('"total"') + '&limitToLast=100')).json(); if (j && !j.error) { boardAll = Object.entries(j).map(([id, v]) => ({ id, name: v.name || '', n: v.total || 0 })).sort((a, b) => b.n - a.n); updateChase(); } } catch (e) {}
+  $('#azSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { azSet = b.dataset.k; renderAz(); } });
+  $('#azList').addEventListener('click', e => {
+    const c = e.target.closest('.azc'); if (!c) return; roll();
+    const i = +c.dataset.i, items = SETS[azSet][1], a = S.ap[azSet] = S.ap[azSet] || items.map(x => x[1]);
+    if (a[i] > 0) { a[i]--; vib(a[i] === 0); }
+    if (a.every(x => x === 0) && S.az[azSet] !== S.day) { S.az[azSet] = S.day; toast('🤲 تقبّل الله، أتممت ' + SETS[azSet][0]); check(); render(); }
+    save(); renderAz();
+  });
+  $('#coll').addEventListener('click', e => { const c = e.target.closest('[data-c]'); if (c) modal('<div class="gift">' + esc(CARDS[+c.dataset.c]) + '</div>'); });
+  $('#nameIn').addEventListener('change', e => { S.name = e.target.value.trim().slice(0, 20); save(); });
+  $('#nfBtn').onclick = () => { S.nf = !S.nf; save(); renderMe(); setupNotifs(); };
+  $('#uGo').onclick = doUpdate; $('#uLater').onclick = () => $('#update').classList.add('hidden');
+  $('#startW').onclick = () => { S.name = $('#nameW').value.trim().slice(0, 20); save(); $('#welcome').classList.add('hidden'); renderMe(); setupNotifs(); };
+  if (!S.joined || !localStorage.getItem(KEY)) { S.joined = Date.now(); save(); $('#welcome').classList.remove('hidden'); } else setupNotifs();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { roll(); render(); checkUpdate(); setupNotifs(); net(); } });
+  checkUpdate(); net();
 }
 init();
 })();
