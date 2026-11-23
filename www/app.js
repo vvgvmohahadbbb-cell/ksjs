@@ -34,7 +34,7 @@ const LEVELS = [[0, 'مبتدئ', '🌱'], [100, 'ذاكر', '🌿'], [1000, 'م
 const TOT = [100, 150, 200, 300], DM = [['p', 50], ['g', 100], ['l', 100], ['w', 100], ['q', 100], ['h', 100], ['s', 99]], AZ = ['m', 'e', 'a', 's'];
 const TGT = [-1, 33, 100, 0];
 
-const defaults = { uid: null, refresh: null, reg: false, dauD: '', seen: {}, clk: {}, adHide: '', num: '', name: '', total: 0, counts: {}, day: '', today: 0, td: {}, md: [], az: {}, ap: {}, chest: '', dhikr: 's', tgt: -1, vib: true, nf: true, streak: 0, best: 0, lastDay: '', freeze: 0, cards: [], joined: Date.now() };
+const defaults = { uid: null, refresh: null, reg: false, dauD: '', seen: {}, clk: {}, adHide: '', num: '', lr: {}, hid: {}, stk0: false, name: '', total: 0, counts: {}, day: '', today: 0, td: {}, md: [], az: {}, ap: {}, chest: '', dhikr: 's', tgt: -1, vib: true, nf: true, streak: 0, best: 0, lastDay: '', freeze: 0, cards: [], joined: Date.now() };
 let S;
 try { S = Object.assign({}, defaults, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { S = Object.assign({}, defaults); }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
@@ -295,7 +295,12 @@ async function showAd() {
 const rnd = () => Math.random().toString(36).slice(2, 6);
 const mkId = () => Date.now().toString(36).padStart(9, '0') + rnd();
 const fnum = n => String(n).replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3');
-const NAMES = {}; let CUR = null, pollT = null, listT = null, rec = null;
+const avC = x => 'hsl(' + ([...String(x)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 7) >>> 0) % 360 + ',45%,38%)';
+const avT = x => avC(x).replace('45%,38%', '70%,68%');
+function avEl(name, grp) { const d = document.createElement('div'); d.className = 'av'; d.style.background = avC(name); d.textContent = grp ? '👥' : ([...String(name).trim()][0] || '?'); return d; }
+function dayLbl(t) { const a = new Date(t), n = new Date(), y = new Date(Date.now() - 864e5); return a.toDateString() === n.toDateString() ? 'اليوم' : a.toDateString() === y.toDateString() ? 'أمس' : a.toLocaleDateString('ar', { day: 'numeric', month: 'long' }); }
+function fmtT(t) { const a = new Date(t); return a.toDateString() === new Date().toDateString() ? a.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' }) : dayLbl(t); }
+const NAMES = {}; let CUR = null, pollT = null, listT = null, beatT = null, rec = null, SKEW = 0;
 async function nameOf(u) {
   if (NAMES[u]) return NAMES[u];
   try { const n = await fb('profiles/' + u + '/name.json'); NAMES[u] = typeof n === 'string' ? n : 'مستخدم'; } catch (e) { NAMES[u] = 'مستخدم'; }
@@ -312,6 +317,11 @@ async function ensureNum() {
   }
   return false;
 }
+async function beat() {
+  if (!ONLINE || document.hidden || !S.uid) return;
+  try { const r = await fb('presence/' + S.uid + '/t.json', 'PUT', { '.sv': 'timestamp' }); if (typeof r === 'number') SKEW = r - Date.now(); } catch (e) {}
+}
+function startBeat() { if (beatT) return; beat(); beatT = setInterval(beat, 30000); }
 function ask(t, ph, cb) {
   $('#mBody').innerHTML = '<h3>' + t + '</h3><input id="qIn" placeholder="' + ph + '"><button class="btn gold wide" id="qOk">تمام</button><button class="btn ghost wide" id="qNo">إلغاء</button>';
   $('#modal').classList.remove('hidden');
@@ -323,7 +333,7 @@ async function chatInit() {
   if (!ONLINE) { $('#myNum').textContent = 'تحتاج إنترنت'; return; }
   $('#myNum').textContent = '...';
   if (!(await ensureNum())) { $('#myNum').textContent = 'تعذر إنشاء الرقم، جرّب لاحقًا'; return; }
-  $('#myNum').textContent = fnum(S.num);
+  $('#myNum').textContent = fnum(S.num); startBeat();
   loadList(); listT = setInterval(() => { if ($('#tab-chat').classList.contains('active') && !CUR) loadList(); }, 8000);
 }
 async function loadList() {
@@ -331,33 +341,121 @@ async function loadList() {
   let j = {}; try { j = await fb('inbox/' + S.uid + '.json') || {}; } catch (e) { return; }
   const rows = await Promise.all(Object.entries(j).sort((a, b) => b[1].t - a[1].t).map(async ([cid, v]) => {
     let t;
-    if (v.g) { let n = null; try { n = await fb('groups/' + cid + '/n.json'); } catch (e) {} t = '👥 ' + (n || 'مجموعة'); } else t = '👤 ' + await nameOf(v.w);
+    if (v.g) { let n = null; try { n = await fb('groups/' + cid + '/n.json'); } catch (e) {} t = n || 'مجموعة'; } else t = await nameOf(v.w);
     return [cid, v, t];
   }));
   const box = $('#chList'); box.innerHTML = rows.length ? '' : '<div class="mut center small">ما عندك محادثات بعد</div>';
-  rows.forEach(([cid, v, t]) => { const d = document.createElement('div'); d.className = 'chi'; d.textContent = t; d.onclick = () => openChat(cid, v.g ? { g: true, title: t } : { w: v.w, title: t }); box.appendChild(d); });
+  rows.forEach(([cid, v, t]) => {
+    const un = v.r && v.t > (S.lr[cid] || 0), d = document.createElement('div'); d.className = 'chi' + (un ? ' un' : '');
+    const body = document.createElement('div'); body.className = 'cb';
+    const n = document.createElement('div'); n.className = 'cn'; n.textContent = t;
+    const tm = document.createElement('div'); tm.className = 'ct'; tm.textContent = (un ? '● ' : '') + fmtT(v.t);
+    body.append(n, tm); d.append(avEl(t, v.g), body);
+    d.onclick = () => openChat(cid, v.g ? { g: true, title: t } : { w: v.w, title: t }); box.appendChild(d);
+  });
 }
-function openChat(cid, o) {
-  CUR = { cid, g: !!o.g, w: o.w, shown: {} };
-  $('#cvT').textContent = o.title; $('#cvInv').hidden = !o.g; $('#msgs').innerHTML = ''; $('#cv').classList.remove('hidden');
-  clearInterval(pollT); pollMsgs(); pollT = setInterval(pollMsgs, 3000);
+async function openChat(cid, o) {
+  const c = CUR = { cid, g: !!o.g, w: o.w, shown: {}, els: {}, tk: {}, rd: '', su: {}, reply: null };
+  S.lr[cid] = Date.now(); save(); $('#rpl').hidden = true; $('#stkP').hidden = true;
+  $('#cvT').textContent = o.title; $('#cvA').innerHTML = ''; $('#cvA').appendChild(avEl(o.title, o.g)); $('#cvS').textContent = ''; $('#cvInv').hidden = !o.g; $('#msgs').innerHTML = ''; $('#cv').classList.remove('hidden');
+  if (o.g) { try { c.ownerId = await fb('groups/' + cid + '/o.json'); } catch (e) {} c.owner = c.ownerId === S.uid; }
+  if (CUR !== c) return;
+  clearInterval(pollT); pollMsgs(); pollT = setInterval(pollMsgs, 2500);
 }
 function closeChat() { clearInterval(pollT); CUR = null; $('#cv').classList.add('hidden'); loadList(); }
+function setStatus(t) {
+  const el = $('#cvS'); if (typeof t !== 'number') { el.textContent = ''; return; }
+  el.textContent = Date.now() + SKEW - t < 70000 ? '🟢 متصل' : 'آخر ظهور ' + new Date(t - SKEW).toLocaleString('ar', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'numeric' });
+}
+function paintTicks(c) {
+  Object.keys(c.tk).forEach(id => { const rd = c.rd && id <= c.rd; c.tk[id].textContent = rd ? '✓✓' : '✓'; c.tk[id].className = 'tk' + (rd ? ' rd' : ''); });
+}
 async function pollMsgs() {
-  if (!CUR || !navigator.onLine) return; const c = CUR;
+  if (!CUR || !navigator.onLine || document.hidden) return; const c = CUR;
   try {
     const j = await fb('msgs/' + c.cid + '.json?orderBy=%22$key%22&limitToLast=50') || {}; if (CUR !== c) return;
-    const box = $('#msgs'), stick = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-    for (const [id, m] of Object.entries(j).sort((a, b) => a[0] < b[0] ? -1 : 1)) { if (c.shown[id]) continue; c.shown[id] = 1; await addBubble(id, m, c); }
+    const keys = Object.keys(j).sort(), box = $('#msgs'), stick = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    for (const id of keys) { if (c.shown[id]) continue; c.shown[id] = 1; await addBubble(id, j[id], c); }
+    Object.keys(c.els).forEach(id => { if (!j[id] && (keys.length < 50 || id >= keys[0])) { c.els[id].remove(); delete c.els[id]; delete c.tk[id]; } });
     if (stick || !c.init) { box.scrollTop = box.scrollHeight; c.init = 1; }
-  } catch (e) {}
+    if (!c.g) {
+      try { const r = await fb('reads/' + c.cid + '/' + c.w + '.json'); c.rd = typeof r === 'string' ? r : ''; paintTicks(c); setStatus(await fb('presence/' + c.w + '/t.json')); } catch (e) {}
+      const last = keys[keys.length - 1];
+      if (last && last !== c.mine) { c.mine = last; S.lr[c.cid] = Date.now(); fb('reads/' + c.cid + '/' + S.uid + '.json', 'PUT', last).catch(() => {}); }
+    }
+  } catch (e) {
+    if (c.g && (e.message === '401' || e.message === '403')) { toast('لم تعد عضوًا في المجموعة'); fb('inbox/' + S.uid + '/' + c.cid + '.json', 'DELETE').catch(() => {}); closeChat(); }
+  }
+}
+async function delMsg(id, c) {
+  try { await fb('.json', 'PATCH', { ['msgs/' + c.cid + '/' + id]: null, ['media/' + c.cid + '/' + id]: null }); if (c.els[id]) { c.els[id].remove(); delete c.els[id]; delete c.tk[id]; } } catch (e) { toast('تعذر الحذف'); }
+}
+async function openDoc(id, m, c) {
+  try {
+    const u = String(await fb('media/' + c.cid + '/' + id + '.json')), mt = u.match(/^data:([^;,]*)/), b64 = u.split(',')[1];
+    const FS = P.Filesystem, FO = P.FileOpener; if (!b64 || !FS || !FO) return toast('غير مدعوم');
+    const name = String(m.x || 'file').replace(/[^\w.\u0600-\u06FF -]/g, '_').slice(0, 60);
+    const r = await FS.writeFile({ path: name, data: b64, directory: 'CACHE' });
+    await FO.open({ filePath: r.uri, contentType: (mt && mt[1]) || 'application/octet-stream', openWithDefault: true });
+  } catch (e) { toast('تعذر فتح الملف'); }
+}
+const SK = 'tasbeeh_stk'; let STK = []; try { STK = JSON.parse(localStorage.getItem(SK) || '[]'); } catch (e) {}
+const saveStk = () => { try { localStorage.setItem(SK, JSON.stringify(STK)); } catch (e) { toast('الذاكرة ممتلئة'); } };
+const stkOk = u => typeof u === 'string' && /^data:image\/(webp|png);base64,[A-Za-z0-9+\/=]+$/.test(u) && u.length <= 90000;
+const skKey = u => u.length + u.slice(-24);
+function addStk(u) {
+  if (!stkOk(u)) return toast('ملصق غير صالح'); if (STK.some(x => skKey(x) === skKey(u))) return toast('موجود عندك');
+  if (STK.length >= 40) return toast('الحد 40 ملصق'); STK.unshift(u); saveStk(); toast('أضيف إلى ملصقاتك');
+}
+function mkStk(im, cb) {
+  const c = document.createElement('canvas'), s = Math.min(256 / im.width, 256 / im.height, 1); c.width = Math.max(1, Math.round(im.width * s)); c.height = Math.max(1, Math.round(im.height * s));
+  c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); let q = .85, d; do { d = c.toDataURL('image/webp', q); q -= .15; } while (d.length > 80000 && q > .1); cb(d);
+}
+function starter() {
+  if (STK.length || S.stk0) return; S.stk0 = 1; save();
+  ['🤲', '❤️', '👍', '😂', '🌙', '🕌', '📿', '😢', '🎉', '🙏', '💚', '🌹'].forEach(e => { const c = document.createElement('canvas'); c.width = c.height = 160; const x = c.getContext('2d'); x.font = '120px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(e, 80, 88); STK.push(c.toDataURL('image/webp', .8)); });
+  saveStk();
+}
+function renderStk(edit) {
+  const p = $('#stkP'); p.innerHTML = '';
+  const add = document.createElement('div'); add.className = 'sk add'; add.textContent = '+'; add.onclick = () => $('#stkF').click(); p.appendChild(add);
+  STK.forEach((u, i) => { const d = document.createElement('div'); d.className = 'sk' + (edit ? ' ed' : ''); const im = document.createElement('img'); im.src = u; d.appendChild(im); d.onclick = () => { if (edit) { STK.splice(i, 1); saveStk(); renderStk(true); } else { sendStk(u); } }; p.appendChild(d); });
+  const e = document.createElement('div'); e.className = 'sk add'; e.textContent = edit ? '✓' : '🗑'; e.onclick = () => renderStk(!edit); p.appendChild(e);
+}
+function sendStk(u) { if (!stkOk(u)) return toast('ملصق غير صالح'); send('s', null, u); }
+function copyTxt(t) {
+  const f = () => { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (x) {} a.remove(); };
+  if (navigator.clipboard) navigator.clipboard.writeText(t).catch(f); else f();
+}
+const snip = m => m.k === 't' ? String(m.x || '').slice(0, 60) : m.k === 'i' ? '🖼 صورة' : m.k === 'a' ? '🎤 رسالة صوتية' : m.k === 's' ? 'ملصق' : '📄 ' + String(m.x || 'ملف').slice(0, 40);
+function msgMenu(id, m, c, mine) {
+  const can = mine || c.owner; let h = '<h3>الرسالة</h3>';
+  if (m.k === 't') h += '<button class="btn ghost wide" id="mCp">📋 نسخ</button>';
+  if (m.k === 's' && !mine) h += '<button class="btn ghost wide" id="mSk">➕ إضافة إلى ملصقاتي</button>';
+  h += '<button class="btn ghost wide" id="mRp">↩ رد</button><button class="btn ghost wide" id="mHd">🙈 حذف لدي فقط</button>' + (can ? '<button class="btn ghost wide" id="mDl">🗑 حذف للجميع</button>' : '');
+  modal(h); const close = () => $('#modal').classList.add('hidden');
+  if ($('#mCp')) $('#mCp').onclick = () => { copyTxt(String(m.x || '')); close(); toast('تم النسخ'); };
+  if ($('#mSk')) $('#mSk').onclick = () => { close(); addStk(c.su[id]); };
+  $('#mRp').onclick = () => { close(); c.reply = snip(m); $('#rplT').textContent = c.reply; $('#rpl').hidden = false; $('#msgIn').focus(); };
+  $('#mHd').onclick = () => { close(); const hh = S.hid[c.cid] = S.hid[c.cid] || {}; hh[id] = 1; save(); if (c.els[id]) { c.els[id].remove(); delete c.els[id]; delete c.tk[id]; } };
+  if ($('#mDl')) $('#mDl').onclick = () => { close(); delMsg(id, c); };
 }
 async function addBubble(id, m, c) {
-  const mine = m.f === S.uid, d = document.createElement('div'); d.className = 'bb ' + (mine ? 'me' : 'ot');
-  if (c.g && !mine) { const s = document.createElement('div'); s.className = 'bs'; s.textContent = await nameOf(m.f); d.appendChild(s); }
+  if ((S.hid[c.cid] || {})[id]) return;
+  const mine = m.f === S.uid, d = document.createElement('div'); d.className = 'bb ' + (mine ? 'me' : 'ot'); c.els[id] = d;
+  const dy = new Date(Number(m.t) || 0).toDateString();
+  if (dy !== c.lastDay) { const sp = document.createElement('div'); sp.className = 'ds'; sp.textContent = dayLbl(Number(m.t) || 0); $('#msgs').appendChild(sp); c.lastDay = dy; c.lastF = null; }
+  if (c.lastF === m.f) d.classList.add('gp'); c.lastF = m.f;
+  if (m.k === 's') d.classList.add('sk2');
+  const x = document.createElement('span'); x.className = 'bx'; x.textContent = '⋯'; x.onclick = () => msgMenu(id, m, c, mine); d.appendChild(x);
+  if (c.g && !mine && !d.classList.contains('gp')) { const s = document.createElement('div'); s.className = 'bs'; s.textContent = await nameOf(m.f); s.style.color = avT(s.textContent); d.appendChild(s); }
+  if (typeof m.q === 'string' && m.q) { const q = document.createElement('div'); q.className = 'qt'; q.textContent = m.q.slice(0, 80); d.appendChild(q); }
   const b = document.createElement('div');
   if (m.k === 't') b.textContent = String(m.x || '');
-  else {
+  else if (m.k === 'f') { b.className = 'bm'; b.textContent = '📄 ' + String(m.x || 'ملف'); b.onclick = () => openDoc(id, m, c); }
+  else if (m.k === 's') {
+    try { const u = await fb('media/' + c.cid + '/' + id + '.json'); if (stkOk(u)) { c.su[id] = u; const im = document.createElement('img'); im.className = 'stk'; im.src = u; b.appendChild(im); } else b.textContent = '🖼'; } catch (e) { b.textContent = '🖼'; }
+  } else {
     b.className = 'bm'; b.textContent = m.k === 'i' ? '🖼 اضغط للعرض' : '🎤 اضغط للتشغيل';
     b.onclick = async () => {
       try {
@@ -369,14 +467,17 @@ async function addBubble(id, m, c) {
   }
   d.appendChild(b);
   const t = document.createElement('div'); t.className = 'bt'; t.textContent = new Date(Number(m.t) || 0).toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
+  if (mine && !c.g) { const k = document.createElement('span'); k.className = 'tk'; k.textContent = '✓'; c.tk[id] = k; t.appendChild(k); }
   d.appendChild(t); $('#msgs').appendChild(d);
 }
 async function send(k, x, media) {
   if (!CUR || !ONLINE) return; const c = CUR, id = mkId(), now = Date.now(), up = {}, m = { f: S.uid, t: now, k };
-  if (k === 't') m.x = x; else { m.m = true; up['media/' + c.cid + '/' + id] = media; }
+  if (k === 't') m.x = x; else { m.m = true; if (k === 'f') m.x = x; up['media/' + c.cid + '/' + id] = media; }
+  if (c.reply) { m.q = c.reply; c.reply = null; $('#rpl').hidden = true; }
+  $('#stkP').hidden = true;
   up['msgs/' + c.cid + '/' + id] = m;
   up['inbox/' + S.uid + '/' + c.cid] = c.g ? { t: now, g: true } : { t: now, w: c.w };
-  if (!c.g) up['inbox/' + c.w + '/' + c.cid] = { t: now, w: S.uid };
+  if (!c.g) up['inbox/' + c.w + '/' + c.cid] = { t: now, w: S.uid, r: true };
   try { await fb('.json', 'PATCH', up); pollMsgs(); } catch (e) { toast('تعذر الإرسال'); }
 }
 function sendImg(f) {
@@ -388,6 +489,10 @@ function sendImg(f) {
   };
   im.onerror = () => toast('ملف غير صالح'); im.src = URL.createObjectURL(f);
 }
+function sendDoc(f) {
+  if (!f) return; if (f.size > 150000) return toast('الملف كبير، الحد 150 كيلوبايت');
+  const fr = new FileReader(); fr.onload = () => send('f', f.name.slice(0, 60), fr.result); fr.readAsDataURL(f);
+}
 async function toggleRec() {
   if (rec) { rec.stop(); return; }
   try {
@@ -397,40 +502,57 @@ async function toggleRec() {
     r.ondataavailable = e => { if (e.data.size) ch.push(e.data); };
     const to = setTimeout(() => { if (r.state === 'recording') r.stop(); }, 45000);
     r.onstop = () => {
-      clearTimeout(to); st.getTracks().forEach(t => t.stop()); rec = null; $('#mic').textContent = '🎤';
+      clearTimeout(to); st.getTracks().forEach(t => t.stop()); rec = null; $('#mic').classList.remove('rec');
       const b = new Blob(ch, { type: r.mimeType || 'audio/webm' }); if (b.size > 150000) return toast('التسجيل طويل');
       const fr = new FileReader(); fr.onload = () => send('a', null, fr.result); fr.readAsDataURL(b);
     };
-    r.start(); rec = r; $('#mic').textContent = '⏹';
+    r.start(); rec = r; $('#mic').classList.add('rec');
   } catch (e) { toast('ما قدرت أستخدم المايك'); }
+}
+async function groupPanel() {
+  const c = CUR; let mem = {}, v = '';
+  try { mem = await fb('groups/' + c.cid + '/mem.json') || {}; v = await fb('groups/' + c.cid + '/v.json'); } catch (e) { return toast('تعذر التحميل'); }
+  const ids = Object.keys(mem), names = await Promise.all(ids.map(nameOf)), link = 'ksjs://join/' + c.cid + '/' + v;
+  let h = '<h3>المجموعة</h3><div class="gift small" style="word-break:break-all;font-size:13px;direction:ltr">' + esc(link) + '</div><button class="btn ghost wide" id="gCp">نسخ الرابط</button>' + (c.owner ? '<button class="btn ghost wide" id="gRs">🔄 تغيير الرابط</button>' : '') + '<div class="mut small">الأعضاء (' + ids.length + ')</div>';
+  ids.forEach((u, i) => { h += '<div class="mr"><span>' + esc(names[i]) + (u === c.ownerId ? ' 👑' : '') + '</span>' + (c.owner && u !== S.uid ? '<button class="btn ghost" data-k="' + esc(u) + '">طرد</button>' : '') + '</div>'; });
+  if (!c.owner) h += '<button class="btn ghost wide" id="gLv">🚪 مغادرة المجموعة</button>';
+  modal(h);
+  $('#gCp').onclick = () => { try { navigator.clipboard.writeText(link); toast('تم النسخ'); } catch (e) {} };
+  if (c.owner) $('#gRs').onclick = async () => {
+    const code = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');
+    try { await fb('groups/' + c.cid + '/v.json', 'PUT', code); toast('تم تغيير الرابط'); $('#modal').classList.add('hidden'); } catch (e) { toast('تعذر'); }
+  };
+  $$('#mBody [data-k]').forEach(b => b.onclick = async () => { try { await fb('groups/' + c.cid + '/mem/' + b.dataset.k + '.json', 'DELETE'); toast('تم الطرد'); groupPanel(); } catch (e) { toast('تعذر الطرد'); } });
+  if (!c.owner) $('#gLv').onclick = async () => { try { await fb('groups/' + c.cid + '/mem/' + S.uid + '.json', 'DELETE'); await fb('inbox/' + S.uid + '/' + c.cid + '.json', 'DELETE'); $('#modal').classList.add('hidden'); closeChat(); } catch (e) { toast('تعذر'); } };
 }
 function bindChat() {
   $('#chNew').onclick = () => ask('رقم الشخص', '123456789', async v => {
     v = v.replace(/\D/g, ''); if (!/^[1-9]\d{8}$/.test(v)) return toast('الرقم لازم 9 أرقام'); if (v === S.num) return toast('هذا رقمك');
-    try { const u = await fb('numbers/' + v + '.json'); if (typeof u !== 'string') return toast('ما في أحد بهذا الرقم'); openChat([S.uid, u].sort().join('_'), { w: u, title: '👤 ' + await nameOf(u) }); } catch (e) { toast('تعذر البحث'); }
+    try { const u = await fb('numbers/' + v + '.json'); if (typeof u !== 'string') return toast('ما في أحد بهذا الرقم'); openChat([S.uid, u].sort().join('_'), { w: u, title: await nameOf(u) }); } catch (e) { toast('تعذر البحث'); }
   });
   $('#chGrp').onclick = () => ask('اسم المجموعة', 'مثال: الأصدقاء', async nme => {
     if (!nme) return; const code = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');
     try {
       const r = await fb('groups.json', 'POST', { n: nme.slice(0, 40), o: S.uid, v: code, t: Date.now(), mem: { [S.uid]: code } });
-      await fb('inbox/' + S.uid + '/' + r.name + '.json', 'PUT', { t: Date.now(), g: true }); openChat(r.name, { g: true, title: '👥 ' + nme.slice(0, 40) });
+      await fb('inbox/' + S.uid + '/' + r.name + '.json', 'PUT', { t: Date.now(), g: true }); openChat(r.name, { g: true, title: nme.slice(0, 40) });
     } catch (e) { toast('تعذر إنشاء المجموعة'); }
   });
   $('#chJoin').onclick = () => ask('الصق رابط المجموعة', 'ksjs://join/...', async v => {
     const m = v.match(/join\/([-\w]{10,40})\/([a-z0-9]{10,30})/i); if (!m) return toast('الرابط غير صحيح');
     try {
       const n = await fb('groups/' + m[1] + '/n.json'); if (!n) return toast('المجموعة غير موجودة');
-      await fb('.json', 'PATCH', { ['groups/' + m[1] + '/mem/' + S.uid]: m[2], ['inbox/' + S.uid + '/' + m[1]]: { t: Date.now(), g: true } }); openChat(m[1], { g: true, title: '👥 ' + n });
+      await fb('.json', 'PATCH', { ['groups/' + m[1] + '/mem/' + S.uid]: m[2], ['inbox/' + S.uid + '/' + m[1]]: { t: Date.now(), g: true } }); openChat(m[1], { g: true, title: n });
     } catch (e) { toast('الرابط منتهي أو غير صحيح'); }
   });
-  $('#cvBack').onclick = closeChat;
-  $('#cvInv').onclick = async () => {
-    try { const v = await fb('groups/' + CUR.cid + '/v.json'); const l = 'ksjs://join/' + CUR.cid + '/' + v; try { navigator.clipboard.writeText(l); } catch (e) {} modal('<h3>رابط المجموعة</h3><p class="mut small">انسخه وأرسله لأي أحد، وهو يلصقه في «انضمام برابط». أي شخص معه الرابط يدخل.</p><div class="gift small" style="word-break:break-all;font-size:13px;direction:ltr">' + esc(l) + '</div>'); } catch (e) { toast('تعذر'); }
-  };
-  const go = () => { const i = $('#msgIn'), v = i.value.trim(); if (!v) return; i.value = ''; send('t', v.slice(0, 1000)); };
+  $('#cvBack').onclick = closeChat; $('#cvInv').onclick = groupPanel;
+  const go = () => { const i = $('#msgIn'), v = i.value.trim(); if (!v) return; i.value = ''; const b = $('#sendB'); b.classList.add('pop'); setTimeout(() => b.classList.remove('pop'), 200); send('t', v.slice(0, 1000)); };
   $('#sendB').onclick = go; $('#msgIn').addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
   $('#imgF').onchange = e => { sendImg(e.target.files[0]); e.target.value = ''; };
+  $('#docF').onchange = e => { sendDoc(e.target.files[0]); e.target.value = ''; };
   $('#mic').onclick = toggleRec;
+  $('#stkB').onclick = () => { starter(); const p = $('#stkP'); p.hidden = !p.hidden; if (!p.hidden) renderStk(false); };
+  $('#stkF').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; const im = new Image(); im.onload = () => mkStk(im, d => { addStk(d); renderStk(false); }); im.onerror = () => toast('ملف غير صالح'); im.src = URL.createObjectURL(f); };
+  $('#rplX').onclick = () => { if (CUR) CUR.reply = null; $('#rpl').hidden = true; };
 }
 
 /* ---------- ربط الأحداث ---------- */
@@ -464,8 +586,8 @@ function init() {
   $('#uGo').onclick = doUpdate; $('#uLater').onclick = () => $('#update').classList.add('hidden');
   $('#startW').onclick = () => { S.name = $('#nameW').value.trim().slice(0, 20); save(); $('#welcome').classList.add('hidden'); renderMe(); setupNotifs(); };
   if (!S.joined || !localStorage.getItem(KEY)) { S.joined = Date.now(); save(); $('#welcome').classList.remove('hidden'); } else setupNotifs();
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { roll(); render(); checkUpdate(); setupNotifs(); net(); } });
-  bindChat(); checkUpdate(); net();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { roll(); render(); checkUpdate(); setupNotifs(); net(); beat(); } });
+  bindChat(); if (S.num) startBeat(); checkUpdate(); net();
 }
 init();
 })();

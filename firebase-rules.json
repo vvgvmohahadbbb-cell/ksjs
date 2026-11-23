@@ -107,7 +107,7 @@
     ".validate": "newData.hasChildren(['num','name'])",
     "num": {
      ".write": "auth != null && auth.uid === $uid && !data.exists()",
-     ".validate": "newData.isString() && newData.val().matches(/^[1-9][0-9]{8}$/) && root.child('numbers').child(newData.val()).val() === $uid"
+     ".validate": "newData.isString() && newData.val().matches(/^[1-9][0-9]{8}$/) && newData.parent().parent().parent().child('numbers').child(newData.val()).val() === $uid"
     },
     "name": {
      ".write": "auth != null && auth.uid === $uid",
@@ -123,13 +123,14 @@
     ".read": "auth != null && auth.uid === $uid",
     "$cid": {
      ".write": "auth != null && (auth.uid === $uid || ($cid.contains(auth.uid) && $cid.contains($uid)))",
-     ".validate": "newData.hasChildren(['t']) && newData.child('t').isNumber() && (!newData.child('w').exists() || (newData.child('w').isString() && newData.child('w').val().length <= 40)) && (!newData.child('g').exists() || newData.child('g').isBoolean())",
+     ".validate": "newData.hasChildren(['t']) && newData.child('t').isNumber() && (!newData.child('w').exists() || (newData.child('w').isString() && newData.child('w').val().length <= 40)) && (!newData.child('r').exists() || newData.child('r').isBoolean()) && (!newData.child('g').exists() || newData.child('g').isBoolean())",
      "t": {},
      "w": {},
      "g": {},
      "$o": {
       ".validate": false
-     }
+     },
+     "r": {}
     }
    }
   },
@@ -137,8 +138,8 @@
    "$cid": {
     ".read": "auth != null && ($cid.contains(auth.uid) || root.child('groups').child($cid).child('mem').child(auth.uid).exists())",
     "$mid": {
-     ".write": "auth != null && ($cid.contains(auth.uid) || root.child('groups').child($cid).child('mem').child(auth.uid).exists()) && !data.exists()",
-     ".validate": "newData.hasChildren(['f','t','k']) && newData.child('f').val() === auth.uid && newData.child('t').isNumber() && newData.child('t').val() <= now + 60000 && newData.child('t').val() >= now - 86400000 && (newData.child('k').val() === 't' ? (newData.child('x').isString() && newData.child('x').val().length > 0 && newData.child('x').val().length <= 1000) : ((newData.child('k').val() === 'i' || newData.child('k').val() === 'a') && newData.child('m').val() === true))",
+     ".write": "auth != null && ($cid.contains(auth.uid) || root.child('groups').child($cid).child('mem').child(auth.uid).exists()) && (!data.exists() || (!newData.exists() && (data.child('f').val() === auth.uid || root.child('groups').child($cid).child('o').val() === auth.uid)))",
+     ".validate": "newData.hasChildren(['f','t','k']) && (!newData.child('q').exists() || (newData.child('q').isString() && newData.child('q').val().length <= 80)) && newData.child('f').val() === auth.uid && newData.child('t').isNumber() && newData.child('t').val() <= now + 60000 && newData.child('t').val() >= now - 86400000 && (newData.child('k').val() === 't' ? (newData.child('x').isString() && newData.child('x').val().length > 0 && newData.child('x').val().length <= 1000) : ((newData.child('k').val() === 'i' || newData.child('k').val() === 'a' || newData.child('k').val() === 'f' || newData.child('k').val() === 's') && newData.child('m').val() === true && (newData.child('k').val() !== 'f' || (newData.child('x').isString() && newData.child('x').val().length > 0 && newData.child('x').val().length <= 60))))",
      "f": {},
      "t": {},
      "k": {},
@@ -146,7 +147,8 @@
      "m": {},
      "$o": {
       ".validate": false
-     }
+     },
+     "q": {}
     }
    }
   },
@@ -154,14 +156,14 @@
    "$cid": {
     "$mid": {
      ".read": "auth != null && ($cid.contains(auth.uid) || root.child('groups').child($cid).child('mem').child(auth.uid).exists())",
-     ".write": "auth != null && ($cid.contains(auth.uid) || root.child('groups').child($cid).child('mem').child(auth.uid).exists()) && !data.exists()",
-     ".validate": "newData.isString() && newData.val().length <= 250000 && (newData.val().beginsWith('data:image/jpeg;base64,') || newData.val().beginsWith('data:audio/'))"
+     ".write": "auth != null && ($cid.contains(auth.uid) || root.child('groups').child($cid).child('mem').child(auth.uid).exists()) && (!data.exists() || (!newData.exists() && (root.child('msgs').child($cid).child($mid).child('f').val() === auth.uid || root.child('groups').child($cid).child('o').val() === auth.uid)))",
+     ".validate": "newData.isString() && newData.val().length <= 250000 && newData.val().beginsWith('data:')"
     }
    }
   },
   "groups": {
    "$gid": {
-    ".write": "auth != null && ((!data.exists() && newData.child('o').val() === auth.uid && newData.child('mem').numChildren() === 1 && newData.child('mem').child(auth.uid).exists() && newData.child('mem').child(auth.uid).val() === newData.child('v').val()) || (data.child('o').val() === auth.uid && newData.child('o').val() === auth.uid))",
+    ".write": "auth != null && ((!data.exists() && newData.child('o').val() === auth.uid && newData.child('mem').child(auth.uid).exists() && newData.child('mem').child(auth.uid).val() === newData.child('v').val()) || (data.child('o').val() === auth.uid && newData.child('o').val() === auth.uid))",
     ".validate": "newData.hasChildren(['n','o','v','t']) && newData.child('n').isString() && newData.child('n').val().length > 0 && newData.child('n').val().length <= 40 && newData.child('v').isString() && newData.child('v').val().length >= 10 && newData.child('v').val().length <= 30 && newData.child('t').isNumber()",
     "n": {
      ".read": "auth != null"
@@ -169,17 +171,39 @@
     "v": {
      ".read": "auth != null && root.child('groups').child($gid).child('mem').child(auth.uid).exists()"
     },
-    "o": {},
+    "o": {
+     ".read": "auth != null && root.child('groups').child($gid).child('mem').child(auth.uid).exists()"
+    },
     "t": {},
     "mem": {
      ".read": "auth != null && root.child('groups').child($gid).child('mem').child(auth.uid).exists()",
      "$uid": {
       ".write": "auth != null && ((auth.uid === $uid && newData.val() === newData.parent().parent().child('v').val()) || (!newData.exists() && (auth.uid === $uid || data.parent().parent().child('o').val() === auth.uid)))",
-      ".validate": "newData.isString() && newData.val().length <= 30"
+      ".validate": "newData.isString() && newData.val().length <= 30 && (auth.uid === $uid || data.parent().parent().child('o').exists())"
      }
     },
     "$other": {
      ".validate": false
+    }
+   }
+  },
+  "presence": {
+   "$uid": {
+    ".read": "auth != null",
+    ".write": "auth != null && auth.uid === $uid",
+    ".validate": "newData.hasChildren(['t']) && newData.child('t').isNumber()",
+    "t": {},
+    "$o": {
+     ".validate": false
+    }
+   }
+  },
+  "reads": {
+   "$cid": {
+    "$uid": {
+     ".read": "auth != null && ($cid.contains(auth.uid) || root.child('groups').child($cid).child('mem').child(auth.uid).exists())",
+     ".write": "auth != null && ($cid.contains(auth.uid) || root.child('groups').child($cid).child('mem').child(auth.uid).exists()) && auth.uid === $uid",
+     ".validate": "newData.isString() && newData.val().length <= 30"
     }
    }
   }
